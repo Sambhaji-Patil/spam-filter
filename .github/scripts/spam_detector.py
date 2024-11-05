@@ -1,14 +1,28 @@
-import joblib  # Use joblib if this was the original library for saving the model
+import joblib
 import sys
 import requests
 from os import getenv
+import re
 
-# Load the `.pkl` model from the repository root directory
-model = joblib.load('spam_detector_model.pkl')  # Update to joblib.load
+# Load the model and vectorizer from the repository
+model = joblib.load('spam_classifier_model.pkl')
+vectorizer = joblib.load('vectorizer.pkl')
+
+def preprocess_text(text):
+    # Convert to lowercase and remove special characters
+    text = text.lower()
+    text = re.sub(r'\W', ' ', text)
+    return text
 
 def is_spam(comment_text):
-    # Use the model to predict if the comment is spam (assuming the model has a `predict` method)
-    return model.predict([comment_text])[0] == 'spam'
+    # Preprocess the comment text
+    processed_text = preprocess_text(comment_text)
+    
+    # Vectorize the processed text
+    message_vectorized = vectorizer.transform([processed_text])
+    
+    # Use the model to predict if the comment is spam
+    return model.predict(message_vectorized)[0] == 1  # Return True if spam
 
 def hide_comment(comment_id, comment_url):
     token = getenv('GITHUB_TOKEN')
