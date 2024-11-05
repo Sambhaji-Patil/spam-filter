@@ -27,11 +27,6 @@ jobs:
           pip install pickle-mixin  # Adjust this if needed for other dependencies
           pip install requests  # Required to use GitHub API for hiding comments
 
-      - name: Download the model file
-        run: |
-          mkdir -p /mnt/data  # Ensure the directory structure matches
-          mv /mnt/data/spam_detector_model.pkl .  # Move the model to the working directory
-
       - name: Run Spam Detection
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
