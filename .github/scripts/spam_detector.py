@@ -27,13 +27,18 @@ def is_spam(comment_text):
 def hide_comment(comment_id, comment_url):
     token = getenv('GITHUB_TOKEN')
     headers = {"Authorization": f"token {token}", "Accept": "application/vnd.github.v3+json"}
-    hide_url = f"{comment_url}/reactions"
+    
+    # Construct the correct URL for hiding a comment
+    # The comment_url should include the full GitHub API URL for the comment
+    hide_url = f"{comment_url}/reactions" if comment_url.startswith('http') else f"https://api.github.com/repos/{comment_url}/reactions"
+    
     response = requests.post(
         hide_url,
         headers=headers,
         json={"content": "🚫"}  # GitHub's API uses this emoji to hide a comment
     )
     return response.status_code == 201
+
 
 if __name__ == "__main__":
     comment_text = sys.argv[1]
