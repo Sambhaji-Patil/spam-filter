@@ -3,7 +3,7 @@ import sys
 import requests
 from os import getenv
 
-# Load the `.pkl` model from the workflow directory
+# Load the `.pkl` model from the repository root directory
 with open('spam_detector_model.pkl', 'rb') as model_file:
     model = pickle.load(model_file)
 
