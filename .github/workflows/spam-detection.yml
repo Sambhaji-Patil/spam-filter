@@ -1,0 +1,39 @@
+name: Spam Detection
+
+on:
+  issue_comment:
+    types: [created]
+  pull_request_review_comment:
+    types: [created]
+  discussion_comment:
+    types: [created]
+
+jobs:
+  detect-spam:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.x'
+      
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pickle-mixin  # Adjust this if needed for other dependencies
+          pip install requests  # Required to use GitHub API for hiding comments
+
+      - name: Download the model file
+        run: |
+          mkdir -p /mnt/data  # Ensure the directory structure matches
+          mv /mnt/data/spam_detector_model.pkl .  # Move the model to the working directory
+
+      - name: Run Spam Detection
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          python .github/scripts/spam_detector.py "${{ github.event.comment.body }}" "${{ github.event.comment.id }}" "${{ github.event.comment.url }}"
