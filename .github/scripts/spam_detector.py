@@ -2,6 +2,7 @@ import joblib
 import requests
 import json
 import os
+import numpy as np
 
 GITHUB_API_URL = "https://api.github.com/graphql"
 
@@ -30,7 +31,7 @@ def fetch_comments(owner, repo, headers, after_cursor=None):
               }
             }
           }
-          pageInfo{
+          pageInfo {
             hasNextPage
             endCursor
           }
@@ -74,8 +75,8 @@ def minimize_comment(comment_id, headers):
 
 def detect_spam(comment_body):
     model = joblib.load("models/spam_detector_model.pkl")
-    return model.predict([[comment_body]])[0] == 1  # Wrap in another list to create a 2D array
-
+    # Reshape the input to a 2D array
+    return model.predict(np.array([comment_body]).reshape(-1, 1))[0] == 1
 
 def moderate_comments(owner, repo, token):
     headers = {
@@ -119,6 +120,6 @@ def moderate_comments(owner, repo, token):
 
 if __name__ == "__main__":
     OWNER = "Sambhaji-Patil"  # Replace with the repository owner
-    REPO = "spam-filter"     # Replace with the repository name
+    REPO = "spam-filter"      # Replace with the repository name
     TOKEN = os.getenv('GITHUB_TOKEN')  # Ensure this is set in your GitHub Actions environment
     moderate_comments(OWNER, REPO, TOKEN)
