@@ -24,8 +24,8 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install scikit-learn  # Required for loading the model
-          pip install pickle-mixin  # Adjust if needed for other dependencies
+          pip install scikit-learn==1.5.1  # Use the version matching your model
+          pip install joblib  # Use joblib to load the model if it was saved with it
           pip install requests  # Required to use GitHub API for hiding comments
 
       - name: Run Spam Detection
