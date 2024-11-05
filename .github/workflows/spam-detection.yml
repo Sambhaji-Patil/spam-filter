@@ -9,9 +9,8 @@ on:
     types: [created]
 
 permissions:
-  issues: write  # Necessary for hiding comments
-  attestations: write  # Allows managing comment reactions
-  actions: read  # Required to use actions
+  issues: write  # Allows the action to read and write issues and comments
+  contents: read  # Allows access to the repository contents
 
 jobs:
   detect-spam:
