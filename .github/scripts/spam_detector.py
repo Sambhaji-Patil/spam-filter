@@ -74,7 +74,7 @@ def minimize_comment(comment_id, headers):
         return False
 
 def detect_spam(comment_body):
-    model = joblib.load("models/spam_detector_model.pkl")
+    model = joblib.load("spam_classifier_model.pkl")
     # Reshape the input to a 2D array with one sample
     input_data = np.array([comment_body]).reshape(1, -1)
     return model.predict(input_data)[0] == 1
