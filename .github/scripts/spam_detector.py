@@ -1,4 +1,3 @@
-from database import *
 import joblib
 import requests
 import json
