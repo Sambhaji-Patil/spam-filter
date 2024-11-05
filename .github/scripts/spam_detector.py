@@ -1,11 +1,10 @@
-import pickle
+import joblib  # Use joblib if this was the original library for saving the model
 import sys
 import requests
 from os import getenv
 
 # Load the `.pkl` model from the repository root directory
-with open('spam_detector_model.pkl', 'rb') as model_file:
-    model = pickle.load(model_file)
+model = joblib.load('spam_detector_model.pkl')  # Update to joblib.load
 
 def is_spam(comment_text):
     # Use the model to predict if the comment is spam (assuming the model has a `predict` method)
