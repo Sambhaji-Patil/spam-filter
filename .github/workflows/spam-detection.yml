@@ -10,7 +10,7 @@ on:
 
 permissions:
   issues: write  # Necessary for hiding comments
-  reactions: write  # Allows managing comment reactions
+  attestations: write  # Allows managing comment reactions
   actions: read  # Required to use actions
 
 jobs:
