@@ -75,8 +75,9 @@ def minimize_comment(comment_id, headers):
 
 def detect_spam(comment_body):
     model = joblib.load("models/spam_detector_model.pkl")
-    # Reshape the input to a 2D array
-    return model.predict(np.array([comment_body]).reshape(-1, 1))[0] == 1
+    # Reshape the input to a 2D array with one sample
+    input_data = np.array([comment_body]).reshape(1, -1)
+    return model.predict(input_data)[0] == 1
 
 def moderate_comments(owner, repo, token):
     headers = {
