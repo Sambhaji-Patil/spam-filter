@@ -1,54 +1,132 @@
+from database import *
 import joblib
-import sys
 import requests
-from os import getenv
-import re
+import json
+import os
 
-# Load the model and vectorizer from the repository
-model = joblib.load('spam_classifier_model.pkl')
-vectorizer = joblib.load('vectorizer.pkl')
+GITHUB_API_URL = "https://api.github.com/graphql"
 
-def preprocess_text(text):
-    # Convert to lowercase and remove special characters
-    text = text.lower()
-    text = re.sub(r'\W', ' ', text)
-    return text
+def fetch_comments(owner, repo, headers, after_cursor=None, lastpage=''):
+    query = """
+    query($owner: String!, $repo: String!, $first: Int, $after: String, $lastpage: String) {
+      repository(owner: $owner, name: $repo) {
+        discussions(first: 1, after: $lastpage) {
+          edges {
+            node {
+              id
+              title
+              comments(first: $first, after: $after) {
+                edges {
+                  node {
+                    id
+                    body
+                    isMinimized
+                  }
+                  cursor
+                }
+                pageInfo {
+                  endCursor
+                  hasNextPage
+                }
+              }
+            }
+          }
+          pageInfo{
+            hasNextPage
+            endCursor
+          }
+        }
+      }
+    }
+    """
+    variables = {
+        "owner": owner,
+        "repo": repo,
+        "first": 10,
+        "after": after_cursor,
+        "lastpage": lastpage,
+    }
+    response = requests.post(GITHUB_API_URL, headers=headers, json={"query": query, "variables": variables})
+    if response.status_code == 200:
+        return response.json()
+    else:
+        raise Exception(f"Query failed with code {response.status_code}. Response: {response.json()}")
 
-def is_spam(comment_text):
-    # Preprocess the comment text
-    processed_text = preprocess_text(comment_text)
+def minimize_comment(comment_id, headers):
+    mutation = """
+    mutation($commentId: ID!) {
+      minimizeComment(input: {subjectId: $commentId, classifier: SPAM}) {
+        minimizedComment {
+          isMinimized
+          minimizedReason
+        }
+      }
+    }
+    """
+    variables = {
+        "commentId": comment_id
+    }
+    response = requests.post(GITHUB_API_URL, headers=headers, json={"query": mutation, "variables": variables})
+    if response.status_code == 200:
+        data = response.json()
+        return data["data"]["minimizeComment"]["minimizedComment"]["isMinimized"]
+    else:
+        print(f"Failed to minimize comment with ID {comment_id}. Status code: {response.status_code}")
+        return False
+
+def detect_spam(comment_body):
+    model = joblib.load("models/spam_detector_model.pkl")
+    return model.predict([comment_body])[0] == 1
+
+def moderate_discussion_comments(repo_id):
+    repo_id, owner, repo, token, last_processed_cursor, a, b = fetch_repository_by_id(repo_id)
+    headers = {
+        'Authorization': f'Bearer {token}',
+        'Content-Type': 'application/json'
+    }
     
-    # Vectorize the processed text
-    message_vectorized = vectorizer.transform([processed_text])
-    
-    # Use the model to predict if the comment is spam
-    return model.predict(message_vectorized)[0] == 1  # Return True if spam
+    spam_results = []
+    latest_cursor = last_processed_cursor
+    lastpage = ''
+    try:
+        while True:
+            latest_cursor = last_processed_cursor
+            comments_remaining = True
+            while comments_remaining:
+                data = fetch_comments(owner, repo, headers, latest_cursor, lastpage)
+                print(json.dumps(data, indent=2))
 
-def hide_comment(comment_id, comment_url):
-    token = getenv('GITHUB_TOKEN')
-    headers = {"Authorization": f"token {token}", "Accept": "application/vnd.github.v3+json"}
-    
-    # Construct the correct URL for hiding a comment
-    # The comment_url should include the full GitHub API URL for the comment
-    hide_url = f"{comment_url}/reactions" if comment_url.startswith('http') else f"https://api.github.com/repos/{comment_url}/reactions"
-    
-    response = requests.post(
-        hide_url,
-        headers=headers,
-        json={"content": "🚫"}  # GitHub's API uses this emoji to hide a comment
-    )
-    return response.status_code == 201
+                for discussion in data['data']['repository']['discussions']['edges']:
+                    for comment_edge in discussion['node']['comments']['edges']:
+                        comment_id = comment_edge['node']['id']
+                        comment_body = comment_edge['node']['body']
+                        is_minimized = comment_edge['node']['isMinimized']
+                        
+                        if not is_minimized:
+                            if detect_spam(comment_body):
+                                hidden = minimize_comment(comment_id, headers)
+                                spam_results.append({"id": comment_id, "hidden": hidden})
 
+                        latest_cursor = comment_edge['cursor']
+
+                    page_info = discussion['node']['comments']['pageInfo']
+                    if not page_info['hasNextPage']:
+                        comments_remaining = False
+
+                if not data['data']['repository']['discussions']['edges']:
+                    break
+
+            if not data['data']['repository']['discussions']['pageInfo']['hasNextPage']:
+                break
+            lastpage = data['data']['repository']['discussions']['pageInfo']["endCursor"]
+    
+    except Exception as e:
+        print("Error processing: " + str(e))
+      
+    print("Moderation Results:")
+    print(json.dumps(spam_results, indent=4))
+
+    update_discussion_cursor(repo_id, latest_cursor)
 
 if __name__ == "__main__":
-    comment_text = sys.argv[1]
-    comment_id = sys.argv[2]
-    comment_url = sys.argv[3]
-
-    if is_spam(comment_text):
-        if hide_comment(comment_id, comment_url):
-            print(f"Comment {comment_id} has been hidden as spam.")
-        else:
-            print(f"Failed to hide comment {comment_id}.")
-    else:
-        print("Comment is not spam.")
+    moderate_discussion_comments(1)
