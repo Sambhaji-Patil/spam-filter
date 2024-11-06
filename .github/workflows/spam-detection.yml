@@ -9,8 +9,9 @@ on:
     types: [created]
 
 permissions:
-  issues: write  # Allows the action to read and write issues and comments
-  contents: read  # Allows access to the repository contents
+  issues: write
+  contents: read
+  discussions: write  # Added for discussion moderation permissions
 
 jobs:
   detect-spam:
@@ -36,4 +37,4 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          python .github/scripts/spam_detector.py "${{ github.event.comment.body }}" "${{ github.event.comment.id }}" "${{ github.event.comment.url }}"
+          python .github/scripts/spam_detector.py
