@@ -68,7 +68,11 @@ def minimize_comment(comment_id, headers):
     response = requests.post(GITHUB_API_URL, headers=headers, json={"query": mutation, "variables": variables})
     if response.status_code == 200:
         data = response.json()
-        return data["data"]["minimizeComment"]["minimizedComment"]["isMinimized"]
+        if 'data' in data and data['data'] and data['data']['minimizeComment']:
+            return data['data']['minimizeComment']['minimizedComment']['isMinimized']
+        else:
+            print(f"Unexpected minimizeComment response structure: {json.dumps(data)}")
+            return False
     else:
         print(f"Failed to minimize comment with ID {comment_id}. Status code: {response.status_code}")
         return False
@@ -90,7 +94,11 @@ def moderate_comments(owner, repo, token):
     try:
         while True:
             data = fetch_comments(owner, repo, headers, latest_cursor)
-            print(json.dumps(data, indent=2))
+            
+            if 'data' not in data or 'repository' not in data['data'] or not data['data']['repository']:
+                print("Error: Unexpected response structure or empty repository data.")
+                print(json.dumps(data, indent=2))
+                return
 
             for discussion in data['data']['repository']['discussions']['edges']:
                 for comment_edge in discussion['node']['comments']['edges']:
