@@ -1,134 +1,41 @@
-import joblib
-import requests
-import json
-import os
-import numpy as np
+name: Spam Detection
 
-GITHUB_API_URL = "https://api.github.com/graphql"
+on:
+  issue_comment:
+    types: [created]
+  pull_request_review_comment:
+    types: [created]
+  discussion_comment:
+    types: [created]
 
-def fetch_comments(owner, repo, headers, after_cursor=None):
-    query = """
-    query($owner: String!, $repo: String!, $first: Int, $after: String) {
-      repository(owner: $owner, name: $repo) {
-        discussions(first: 1) {
-          edges {
-            node {
-              id
-              title
-              comments(first: $first, after: $after) {
-                edges {
-                  node {
-                    id
-                    body
-                    isMinimized
-                  }
-                  cursor
-                }
-                pageInfo {
-                  endCursor
-                  hasNextPage
-                }
-              }
-            }
-          }
-          pageInfo {
-            hasNextPage
-            endCursor
-          }
-        }
-      }
-    }
-    """
-    variables = {
-        "owner": owner,
-        "repo": repo,
-        "first": 10,
-        "after": after_cursor,
-    }
-    response = requests.post(GITHUB_API_URL, headers=headers, json={"query": query, "variables": variables})
-    if response.status_code == 200:
-        return response.json()
-    else:
-        raise Exception(f"Query failed with code {response.status_code}. Response: {response.json()}")
+permissions:
+  issues: write  # Allows the action to read and write issues comments
+  pull-requests: write  # Allows the action to read and write pull request comments
+  discussions: write  # Allows the action to read and write discussion comments
+  contents: read  # Allows access to the repository contents
 
-def minimize_comment(comment_id, headers):
-    mutation = """
-    mutation($commentId: ID!) {
-      minimizeComment(input: {subjectId: $commentId, classifier: SPAM}) {
-        minimizedComment {
-          isMinimized
-          minimizedReason
-        }
-      }
-    }
-    """
-    variables = {
-        "commentId": comment_id
-    }
-    response = requests.post(GITHUB_API_URL, headers=headers, json={"query": mutation, "variables": variables})
-    if response.status_code == 200:
-        data = response.json()
-        if 'data' in data and data['data'] and data['data']['minimizeComment']:
-            return data['data']['minimizeComment']['minimizedComment']['isMinimized']
-        else:
-            print(f"Unexpected minimizeComment response structure: {json.dumps(data)}")
-            return False
-    else:
-        print(f"Failed to minimize comment with ID {comment_id}. Status code: {response.status_code}")
-        return False
+jobs:
+  detect-spam:
+    runs-on: ubuntu-latest
 
-def detect_spam(comment_body):
-    model = joblib.load("spam_classifier_model.pkl")
-    vectorizer = joblib.load("vectorizer.pkl")  # Load the vectorizer
-    input_data = vectorizer.transform([comment_body])  # Transform the comment
-    return model.predict(input_data)[0] == 1
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v3
 
-def moderate_comments(owner, repo, token):
-    headers = {
-        'Authorization': f'Bearer {token}',
-        'Content-Type': 'application/json'
-    }
-    
-    spam_results = []
-    latest_cursor = None
-    try:
-        while True:
-            data = fetch_comments(owner, repo, headers, latest_cursor)
-            
-            if 'data' not in data or 'repository' not in data['data'] or not data['data']['repository']:
-                print("Error: Unexpected response structure or empty repository data.")
-                print(json.dumps(data, indent=2))
-                return
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.x'
 
-            for discussion in data['data']['repository']['discussions']['edges']:
-                for comment_edge in discussion['node']['comments']['edges']:
-                    comment_id = comment_edge['node']['id']
-                    comment_body = comment_edge['node']['body']
-                    is_minimized = comment_edge['node']['isMinimized']
-                    
-                    if not is_minimized:
-                        if detect_spam(comment_body):
-                            hidden = minimize_comment(comment_id, headers)
-                            spam_results.append({"id": comment_id, "hidden": hidden})
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install scikit-learn==1.5.1
+          pip install joblib
+          pip install requests
 
-                    latest_cursor = comment_edge['cursor']
-
-                page_info = discussion['node']['comments']['pageInfo']
-                if not page_info['hasNextPage']:
-                    break
-
-            if not data['data']['repository']['discussions']['pageInfo']['hasNextPage']:
-                break
-            latest_cursor = data['data']['repository']['discussions']['pageInfo']["endCursor"]
-    
-    except Exception as e:
-        print("Error processing: " + str(e))
-      
-    print("Moderation Results:")
-    print(json.dumps(spam_results, indent=4))
-
-if __name__ == "__main__":
-    OWNER = "Sambhaji-Patil"  # Replace with the repository owner
-    REPO = "spam-filter"      # Replace with the repository name
-    TOKEN = os.getenv('GITHUB_TOKEN')  # Ensure this is set in your GitHub Actions environment
-    moderate_comments(OWNER, REPO, TOKEN)
+      - name: Run Spam Detection
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          python .github/scripts/spam_detector.py
